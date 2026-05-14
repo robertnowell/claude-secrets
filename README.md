@@ -37,7 +37,7 @@ Claude (with this skill loaded) will:
 2. Suggest: "I'll trigger a popup so you can paste the key — it won't go through chat."
 3. Run `claude-secrets prompt STRIPE_KEY` — system popup appears
 4. You type the value, click Store
-5. Run `claude-secrets run --inject STRIPE_KEY=K -- curl -H "Authorization: Bearer $K" https://api.stripe.com/v1/charges`
+5. Run `claude-secrets run --inject STRIPE_KEY=K -- bash -c 'curl -H "Authorization: Bearer $K" https://api.stripe.com/v1/charges'`
 6. Show you the response with the key redacted from any echoes
 
 The value lives in macOS Keychain. Claude's context shows only command output with `[REDACTED:STRIPE_KEY]` wherever the value would have appeared.
@@ -97,7 +97,7 @@ python3 -m venv .venv
 # Then:
 .venv/bin/python -m pipeline.claude_secrets prompt MY_KEY
 .venv/bin/python -m pipeline.claude_secrets list
-.venv/bin/python -m pipeline.claude_secrets run --inject MY_KEY=K -- env | grep K
+.venv/bin/python -m pipeline.claude_secrets run --inject MY_KEY=K -- bash -c 'env | grep K'
 .venv/bin/python -m pipeline.claude_secrets rm MY_KEY
 ```
 

@@ -109,6 +109,28 @@ def cmd_run(args):
         _emit_err("no command provided after --")
         return
 
+    # Footgun detection: argv is exec'd directly, no shell. If user wrote
+    # literal "$VAR" references for an injected var and there's no
+    # `bash -c` / `sh -c` wrapper in argv, the var will NOT expand and the
+    # command will fail in a confusing way (received header = "Bearer $VAR").
+    injected_vars = {env_var for _, env_var in injections}
+    has_shell_wrapper = any(
+        args.cmd[i] in ("bash", "sh", "zsh") and i + 1 < len(args.cmd) and args.cmd[i + 1] == "-c"
+        for i in range(len(args.cmd))
+    )
+    if not has_shell_wrapper:
+        argv_joined = " ".join(args.cmd)
+        for var in injected_vars:
+            if f"${var}" in argv_joined or f"${{{var}}}" in argv_joined:
+                _emit_err(
+                    f"command references ${var} in argv but no shell wrapper present. "
+                    f"argv is exec'd directly — $VAR will NOT expand. "
+                    f"Wrap in bash -c '...': "
+                    f"`claude-secrets run --inject {var}=... -- bash -c 'your-command-with-${var}'`",
+                    exit_code=3,
+                )
+                return
+
     try:
         result = runner.run_with_secret(
             injections, args.cmd, timeout_sec=args.timeout

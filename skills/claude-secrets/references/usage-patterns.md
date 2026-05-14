@@ -2,6 +2,25 @@
 
 Concrete examples of when and how to use each subcommand.
 
+## ⚠️ Critical pattern: always wrap `run` commands in `bash -c '...'`
+
+The broker exec's argv directly without a shell, so `$VAR` references in argv are passed as **literal strings**, not expanded.
+
+```bash
+# ❌ BROKEN — $K is literal, not expanded
+claude-secrets run --inject STRIPE_KEY=K -- curl -H "Authorization: Bearer $K" https://api.stripe.com/v1/account
+# curl sends header: "Authorization: Bearer $K"  →  401
+
+# ✅ WORKS — bash -c opens a shell inside the subprocess where K is set
+claude-secrets run --inject STRIPE_KEY=K -- bash -c '
+  curl -H "Authorization: Bearer $K" https://api.stripe.com/v1/account
+'
+```
+
+**Use single quotes around the bash -c body.** Single quotes prevent your outer shell from touching `$K`; the inner `bash -c` shell expands it at exec time inside the broker.
+
+This pattern applies to **every** example below.
+
 ## Stripe API call
 
 User: "Test that my Stripe key works."
@@ -16,8 +35,9 @@ claude-secrets prompt STRIPE_KEY --json
 # → {"status":"ok","name":"STRIPE_KEY","action":"stored"}
 
 # 3. Use it
-claude-secrets run --inject STRIPE_KEY=K -- \
+claude-secrets run --inject STRIPE_KEY=K -- bash -c '
   curl -s -H "Authorization: Bearer $K" https://api.stripe.com/v1/account
+'
 # → {"status":"ok","exit_code":0,"stdout":"{ ... account data ... }","stderr":""}
 ```
 
@@ -26,12 +46,14 @@ claude-secrets run --inject STRIPE_KEY=K -- \
 ```bash
 claude-secrets prompt GITHUB_TOKEN --description "PAT with repo scope" --json
 
-claude-secrets run --inject GITHUB_TOKEN=GH_PAT -- \
+claude-secrets run --inject GITHUB_TOKEN=GH_PAT -- bash -c '
   gh api user --jq .login
+'
 
 # Or use directly with git:
-claude-secrets run --inject GITHUB_TOKEN=GH_PAT -- \
-  bash -c 'git push https://x:$GH_PAT@github.com/owner/repo.git main'
+claude-secrets run --inject GITHUB_TOKEN=GH_PAT -- bash -c '
+  git push https://x:$GH_PAT@github.com/owner/repo.git main
+'
 ```
 
 ## AWS credentials (multiple secrets, one invocation)
@@ -40,6 +62,8 @@ claude-secrets run --inject GITHUB_TOKEN=GH_PAT -- \
 claude-secrets prompt AWS_ACCESS_KEY_ID --json
 claude-secrets prompt AWS_SECRET_ACCESS_KEY --json
 
+# aws CLI reads env vars directly — no $VAR expansion needed in argv,
+# so this one works without bash -c:
 claude-secrets run \
   --inject AWS_ACCESS_KEY_ID=AWS_ACCESS_KEY_ID \
   --inject AWS_SECRET_ACCESS_KEY=AWS_SECRET_ACCESS_KEY \
@@ -51,9 +75,19 @@ claude-secrets run \
 ```bash
 claude-secrets prompt OPENAI_API_KEY --json
 
-claude-secrets run --inject OPENAI_API_KEY=OPENAI_API_KEY -- \
-  curl -s https://api.openai.com/v1/models \
-  -H "Authorization: Bearer $OPENAI_API_KEY"
+claude-secrets run --inject OPENAI_API_KEY=OAI -- bash -c '
+  curl -s https://api.openai.com/v1/models -H "Authorization: Bearer $OAI"
+'
+```
+
+## Postmark / any service taking an X-... header
+
+```bash
+claude-secrets prompt POSTMARK_SERVER_TOKEN --json
+
+claude-secrets run --inject POSTMARK_SERVER_TOKEN=PMT -- bash -c '
+  curl -s -H "X-Postmark-Server-Token: $PMT" https://api.postmarkapp.com/server
+'
 ```
 
 ## Rotating a leaked credential

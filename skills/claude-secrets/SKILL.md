@@ -43,11 +43,12 @@ The broker reads the value from Keychain, exec's your command with `ENV_VAR` set
 Example — testing a Stripe API call:
 
 ```bash
-claude-secrets run --inject STRIPE_KEY=STRIPE_KEY -- \
-  curl -s -H "Authorization: Bearer $STRIPE_KEY" https://api.stripe.com/v1/charges
+claude-secrets run --inject STRIPE_KEY=K -- bash -c '
+  curl -s -H "Authorization: Bearer $K" https://api.stripe.com/v1/charges
+'
 ```
 
-Note how you reference `$STRIPE_KEY` in the command — the shell expands it at exec time inside the broker's subprocess. You never type or read the actual value.
+**Critical: wrap the command in `bash -c '...'`.** The broker exec's argv directly (no shell), so `$VAR` in argv is passed as a literal string. The `bash -c` wrapper opens a shell inside the subprocess where the env var actually expands. Without `bash -c`, your curl would send `Authorization: Bearer $K` literally and get a 401.
 
 ## Other commands
 
