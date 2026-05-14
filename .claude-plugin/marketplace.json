@@ -1,0 +1,17 @@
+{
+  "name": "claude-secrets-marketplace",
+  "owner": {
+    "name": "Robert Nowell"
+  },
+  "metadata": {
+    "description": "Safely share credentials with Claude Code without putting them in chat"
+  },
+  "plugins": [
+    {
+      "name": "claude-secrets",
+      "description": "Paste a credential into a system popup, store it in macOS Keychain, then reference it by name from any command. The value never enters Claude's context window.",
+      "category": "security",
+      "source": "./"
+    }
+  ]
+}

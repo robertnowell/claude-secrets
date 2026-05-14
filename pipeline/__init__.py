@@ -1,0 +1,1 @@
+"""claude-secrets pipeline package."""

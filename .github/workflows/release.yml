@@ -1,0 +1,48 @@
+name: release
+
+# Auto-tag and auto-create a GitHub Release on every push to main.
+# Tags follow vMAJOR.MINOR.PATCH; auto-increment patch.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine next patch version
+        id: version
+        run: |
+          set -euo pipefail
+          latest=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n1 || true)
+          if [ -z "$latest" ]; then
+            next="v1.0.0"
+          else
+            IFS='.' read -ra parts <<< "${latest#v}"
+            major="${parts[0]}"; minor="${parts[1]}"; patch="${parts[2]}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Next tag: $next"
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NEXT="${{ steps.version.outputs.next }}"
+          git tag "$NEXT"
+          git push origin "$NEXT"
+          gh release create "$NEXT" --title "$NEXT" --generate-notes --target "$GITHUB_SHA"
