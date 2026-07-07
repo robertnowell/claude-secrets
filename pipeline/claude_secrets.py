@@ -179,6 +179,61 @@ def cmd_status(args):
     _emit(info)
 
 
+def cmd_store_from(args):
+    """Store a secret from a producer command's stdout — value never enters Claude's context.
+
+    Runs CMD (optionally with other secrets injected via --inject, e.g. a DB URL),
+    captures its stdout, and writes the stripped value straight to Keychain. The value
+    lives only in the subprocess stdout -> this process's local -> keychain; we emit only
+    a byte count, never the value. Use to store a credential Claude can *fetch* but must
+    not *see* (e.g. a key decrypted out of a database).
+    """
+    injections: list[tuple[str, str]] = []
+    for inj in args.inject:
+        if "=" not in inj:
+            _emit_err(f"--inject expects NAME=ENV_VAR, got: {inj}")
+            return
+        name, env_var = inj.split("=", 1)
+        injections.append((name.strip(), env_var.strip()))
+
+    cmd = getattr(args, "cmd", None) or []
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        _emit_err("no producer command provided after --")
+        return
+
+    try:
+        result = runner.run_with_secret(injections, cmd, timeout_sec=args.timeout)
+    except KeyError as e:
+        audit.log("store_from_missing_secret", str(e))
+        _emit_err(str(e), exit_code=2)
+        return
+
+    if result.returncode != 0:
+        audit.log("store_from_producer_failed", args.name, exit_code=result.returncode)
+        _emit_err(
+            f"producer exited {result.returncode}; nothing stored. "
+            f"stderr(sanitized): {result.stderr.strip()[:300]}",
+            exit_code=result.returncode or 1,
+        )
+        return
+
+    value = result.stdout.strip()
+    if not value:
+        _emit_err("producer produced no stdout; nothing stored")
+        return
+
+    try:
+        store.set_secret(args.name, value, description=args.description or "")
+        audit.log("store_from", args.name)
+        _emit({"status": "ok", "name": args.name, "action": "stored",
+                "source": "command", "bytes": len(value)})
+    except Exception as e:
+        audit.log("store_from_store_failed", args.name, context=str(e))
+        _emit_err(f"failed to store: {e}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="claude-secrets",
@@ -231,14 +286,43 @@ def build_parser() -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="Report broker state.")
     p_status.set_defaults(func=cmd_status)
 
+    # store-from
+    p_sf = sub.add_parser(
+        "store-from",
+        help="Store a secret from a producer command's stdout (value never shown).",
+    )
+    p_sf.add_argument("name", help="Secret name to store under")
+    p_sf.add_argument("--description", help="Optional metadata")
+    p_sf.add_argument(
+        "--inject", action="append", default=[], metavar="NAME=ENV_VAR",
+        help="Inject an existing secret into the producer's env. May be repeated.",
+    )
+    p_sf.add_argument("--timeout", type=int, default=600, help="Producer timeout in seconds")
+    # No `cmd` positional: the producer after "--" is supplied by main()'s pre-split,
+    # so a REMAINDER here would greedily swallow --description/--inject.
+    p_sf.set_defaults(func=cmd_store_from)
+
     return p
 
 
 def main():
-    parser = build_parser()
-    args = parser.parse_args()
+    # Split off the "-- PRODUCER-COMMAND" before argparse. argparse's REMAINDER
+    # is unreliable when optionals (--description/--inject) precede a positional
+    # like store-from's `name` — it swallows the optionals into the command.
+    # Splitting on the first standalone "--" ourselves is the robust convention
+    # and is backward compatible (only activates when "--" is present).
+    raw = sys.argv[1:]
+    producer = None
+    if "--" in raw:
+        i = raw.index("--")
+        raw, producer = raw[:i], raw[i + 1:]
 
-    # `run` collects remainder including leading "--"; strip it.
+    parser = build_parser()
+    args = parser.parse_args(raw)
+    if producer is not None:
+        args.cmd = producer
+
+    # Legacy safety: if a subcommand still captured a leading "--", drop it.
     if hasattr(args, "cmd") and args.cmd and args.cmd[0] == "--":
         args.cmd = args.cmd[1:]
 

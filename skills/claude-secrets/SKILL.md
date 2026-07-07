@@ -50,12 +50,27 @@ claude-secrets run --inject STRIPE_KEY=K -- bash -c '
 
 **Critical: wrap the command in `bash -c '...'`.** The broker exec's argv directly (no shell), so `$VAR` in argv is passed as a literal string. The `bash -c` wrapper opens a shell inside the subprocess where the env var actually expands. Without `bash -c`, your curl would send `Authorization: Bearer $K` literally and get a 401.
 
+## Storing a credential you can fetch but must not see
+
+When the value lives somewhere you can *read programmatically* (a database, another API, a decrypt call) but must never enter your context, use `store-from` instead of the popup. It runs a producer command, captures its stdout, and writes the stripped value straight to Keychain — you see only a byte count.
+
+```bash
+claude-secrets store-from NAME [--description D] [--inject SECRET=ENV ...] -- <producer-command>
+```
+
+The producer must print **only** the value to stdout (diagnostics to stderr) — its whole stripped stdout becomes the secret. A plausible byte count in the result confirms nothing else leaked. `--inject` lets the producer itself use other stored secrets (e.g. a DB URL). Example — decrypt a key out of a database and store it without ever printing it:
+
+```bash
+claude-secrets store-from SERVICE_KEY --inject DB_URL=DB_URL -- bash -c 'my-decrypt-tool --field api_key'
+```
+
 ## Other commands
 
 | Command | Purpose |
 |---|---|
 | `claude-secrets list --json` | List stored names + metadata (never values) |
 | `claude-secrets rotate NAME --json` | Replace the value (pops dialog again) |
+| `claude-secrets store-from NAME -- CMD` | Store a value from a command's stdout (never shown) |
 | `claude-secrets rm NAME --json` | Delete a stored credential |
 | `claude-secrets status --json` | Check if the broker is working |
 
