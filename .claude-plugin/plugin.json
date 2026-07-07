@@ -1,6 +1,6 @@
 {
   "name": "claude-secrets",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Paste an API key into a system popup, store it in macOS Keychain, then reference it by name from any command. The value never enters Claude's context window.",
   "author": {
     "name": "Robert Nowell"
@@ -8,5 +8,12 @@
   "homepage": "https://github.com/robertnowell/claude-secrets",
   "repository": "https://github.com/robertnowell/claude-secrets",
   "license": "MIT",
-  "keywords": ["secrets", "credentials", "keychain", "ai-safety", "claude-code", "macos"]
+  "keywords": [
+    "secrets",
+    "credentials",
+    "keychain",
+    "ai-safety",
+    "claude-code",
+    "macos"
+  ]
 }
