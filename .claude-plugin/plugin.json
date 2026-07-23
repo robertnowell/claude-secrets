@@ -1,6 +1,6 @@
 {
   "name": "claude-secrets",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "Paste an API key into a system popup, store it in macOS Keychain, then reference it by name from any command. The value never enters Claude's context window.",
   "author": {
     "name": "Robert Nowell"

@@ -29,7 +29,7 @@ for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
 done
 
 if [ -z "$PYTHON_BIN" ]; then
-  echo '{"hookSpecificOutput":{"additionalContext":"claude-secrets ERROR: Python 3.10+ not found. Install via `brew install python@3.12`, then restart Claude Code."}}'
+  echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"claude-secrets ERROR: Python 3.10+ not found. Install via `brew install python@3.12`, then restart Claude Code."}}'
   exit 0
 fi
 
@@ -43,7 +43,7 @@ if [ "$CURRENT_HASH" != "$CACHED_HASH" ] || [ ! -d "$VENV_DIR/bin" ]; then
   "$PYTHON_BIN" -m venv "$VENV_DIR" 2>/dev/null || true
   "$VENV_DIR/bin/pip" install --quiet --disable-pip-version-check --upgrade pip >/dev/null 2>&1 || true
   if ! "$VENV_DIR/bin/pip" install --quiet --disable-pip-version-check -r "$REQUIREMENTS" 2>&1 | tail -5 >&2; then
-    echo '{"hookSpecificOutput":{"additionalContext":"claude-secrets ERROR: pip install of keyring failed. Check Python version and network."}}'
+    echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"claude-secrets ERROR: pip install of keyring failed. Check Python version and network."}}'
     exit 0
   fi
   echo "$CURRENT_HASH" > "$HASH_FILE"
@@ -56,4 +56,4 @@ if [ -f "$MANIFEST" ]; then
   SECRET_COUNT=$("$VENV_DIR/bin/python" -c "import json; print(len(json.load(open('$MANIFEST'))['secrets']))" 2>/dev/null || echo 0)
 fi
 
-echo "{\"hookSpecificOutput\":{\"additionalContext\":\"claude-secrets ready: ${SECRET_COUNT} secret(s) stored. Call \`claude-secrets prompt NAME\` to add. Call \`claude-secrets run --inject NAME=VAR -- cmd\` to use.\"}}"
+echo "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"claude-secrets ready: ${SECRET_COUNT} secret(s) stored. Call \`claude-secrets prompt NAME\` to add. Call \`claude-secrets run --inject NAME=VAR -- cmd\` to use.\"}}"
